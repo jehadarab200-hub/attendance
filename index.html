@@ -101,51 +101,74 @@
       statusDiv.className = 'status error';
       statusDiv.innerText = 'Error: No sheetId parameter found in the URL. Please add ?sheetId=YOUR_SPREADSHEET_ID';
     } else {
-      const fetchUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json`;
+      const csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv`;
 
-      fetch(fetchUrl)
+      fetch(csvUrl)
         .then(response => {
-          if (!response.ok) throw new Error('Network response was not ok');
+          if (!response.ok) throw new Error('Failed to fetch data');
           return response.text();
         })
-        .then(data => {
-          const jsonString = data.substring(data.indexOf('{'), data.lastIndexOf('}') + 1);
-          const jsonData = JSON.parse(jsonString);
-          renderTable(jsonData.table);
-          statusDiv.style.display = 'none';
+        .then(csvText => {
+          const rows = parseCSV(csvText);
+          if (rows.length > 0) {
+            renderTable(rows);
+            statusDiv.style.display = 'none';
+          } else {
+            throw new Error('Spreadsheet appears to be empty');
+          }
         })
         .catch(err => {
           statusDiv.className = 'status error';
-          statusDiv.innerText = 'Failed to load sheet data. Please ensure your Google Sheet access is set to "Anyone with the link can view".';
+          statusDiv.innerText = 'Failed to load sheet data. Please ensure your Google Sheet is set to "Anyone with the link can view".';
           console.error(err);
         });
     }
 
-    function renderTable(tableData) {
+    function parseCSV(text) {
+      const lines = text.split('\n');
+      return lines.map(line => {
+        const result = [];
+        let current = '';
+        let inQuotes = false;
+        for (let i = 0; i < line.length; i++) {
+          const char = line[i];
+          if (char === '"') {
+            inQuotes = !inQuotes;
+          } else if (char === ',' && !inQuotes) {
+            result.push(current.trim());
+            current = '';
+          } else {
+            current += char;
+          }
+        }
+        result.push(current.trim());
+        return result;
+      });
+    }
+
+    function renderTable(rows) {
       const headerRow = document.getElementById('tableHeader');
       const body = document.getElementById('tableBody');
 
       headerRow.innerHTML = '';
       body.innerHTML = '';
 
-      if (tableData.cols) {
-        tableData.cols.forEach(col => {
-          const th = document.createElement('th');
-          th.innerText = col.label || col.id || '';
-          headerRow.appendChild(th);
-        });
-      }
+      const headers = rows[0];
+      headers.forEach(header => {
+        const th = document.createElement('th');
+        th.innerText = header.replace(/^"|"$/g, '');
+        headerRow.appendChild(th);
+      });
 
-      if (tableData.rows) {
-        tableData.rows.forEach(row => {
-          const tr = document.createElement('tr');
-          row.c.forEach(cell => {
-            const td = document.createElement('td');
-            td.innerText = cell && cell.v !== null && cell.v !== undefined ? cell.v : '';
-            tr.appendChild(td);
-          });
-          body.appendChild(tr);
+      for (let i = 1; i < rows.length; i++) {
+        if (rows[i].length === 1 && rows[i][0] === '') continue;
+        const tr = document.createElement('tr');
+        rows[i].forEach(cell => {
+          const td = document.createElement('td');
+          td.innerText = cell.replace(/^"|"$/g, '');
+          tr.appendChild(td);
         });
+        body.appendChild(tr);
       }
     }
 
