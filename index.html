@@ -5,17 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Attendance Dashboard</title>
   <style>
-    :root {
-      --primary-color: #007bff;
-      --bg-color: #f8f9fa;
-      --card-bg: #ffffff;
-      --text-color: #333333;
-    }
-
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background-color: var(--bg-color);
-      color: var(--text-color);
+      background-color: #f8f9fa;
+      color: #333;
       margin: 0;
       padding: 20px;
     }
@@ -23,7 +16,7 @@
     .container {
       max-width: 1000px;
       margin: 0 auto;
-      background: var(--card-bg);
+      background: #ffffff;
       padding: 25px;
       border-radius: 12px;
       box-shadow: 0 4px 6px rgba(0,0,0,0.05);
@@ -100,7 +93,6 @@
   </div>
 
   <script>
-    // Extract sheetId from URL query parameters
     const urlParams = new URLSearchParams(window.location.search);
     const sheetId = urlParams.get('sheetId');
     const statusDiv = document.getElementById('status');
@@ -109,20 +101,22 @@
       statusDiv.className = 'status error';
       statusDiv.innerText = 'Error: No sheetId parameter found in the URL. Please add ?sheetId=YOUR_SPREADSHEET_ID';
     } else {
-      // Use gviz endpoint to fetch sheet data as JSON
       const fetchUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json`;
 
       fetch(fetchUrl)
-        .then(response => response.text())
+        .then(response => {
+          if (!response.ok) throw new Error('Network response was not ok');
+          return response.text();
+        })
         .then(data => {
-          // Parse Google's JSON response wrapper
-          const jsonData = JSON.parse(data.substring(47, data.length - 2));
+          const jsonString = data.substring(data.indexOf('{'), data.lastIndexOf('}') + 1);
+          const jsonData = JSON.parse(jsonString);
           renderTable(jsonData.table);
           statusDiv.style.display = 'none';
         })
         .catch(err => {
           statusDiv.className = 'status error';
-          statusDiv.innerText = 'Failed to load sheet data. Ensure the Google Sheet is shared as "Anyone with the link can view".';
+          statusDiv.innerText = 'Failed to load sheet data. Please ensure your Google Sheet access is set to "Anyone with the link can view".';
           console.error(err);
         });
     }
@@ -131,23 +125,28 @@
       const headerRow = document.getElementById('tableHeader');
       const body = document.getElementById('tableBody');
 
-      // Populate Headers
-      tableData.cols.forEach(col => {
-        const th = document.createElement('th');
-        th.innerText = col.label || '';
-        headerRow.appendChild(th);
-      });
+      headerRow.innerHTML = '';
+      body.innerHTML = '';
 
-      // Populate Rows
-      tableData.rows.forEach(row => {
-        const tr = document.createElement('tr');
-        row.c.forEach(cell => {
-          const td = document.createElement('td');
-          td.innerText = cell ? (cell.v !== null ? cell.v : '') : '';
-          tr.appendChild(td);
+      if (tableData.cols) {
+        tableData.cols.forEach(col => {
+          const th = document.createElement('th');
+          th.innerText = col.label || col.id || '';
+          headerRow.appendChild(th);
         });
-        body.appendChild(tr);
-      });
+      }
+
+      if (tableData.rows) {
+        tableData.rows.forEach(row => {
+          const tr = document.createElement('tr');
+          row.c.forEach(cell => {
+            const td = document.createElement('td');
+            td.innerText = cell && cell.v !== null && cell.v !== undefined ? cell.v : '';
+            tr.appendChild(td);
+          });
+          body.appendChild(tr);
+        });
+      }
     }
 
     function filterTable() {
